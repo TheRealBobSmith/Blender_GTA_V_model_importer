@@ -110,6 +110,17 @@ class ImportGTA(bpy.types.Operator, ImportHelper):
         options=set()
     )
 
+    merge_doubles: EnumProperty(
+        name="merge double verticies",
+        description="Merge double vertices by proximity.",
+        items=[
+            ("yes", "yes", "merge doubles", 1),
+            ("no", "no", "do not merge doubles", 2),
+        ],
+        default="yes",
+        options=set()
+    )
+
     def execute(self, context):
         keywords = self.as_keywords()
         keywords["name"] = os.path.basename(keywords["filepath"]).split(".")[0]

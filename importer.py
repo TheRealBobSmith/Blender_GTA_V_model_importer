@@ -9,6 +9,7 @@ import os
 from mathutils import (Vector, Quaternion, Matrix, Euler)
 
 bone_mapping = []
+numBones = 0
 skeleton = None
 selection = None
 vertexStructures = {
@@ -19,8 +20,12 @@ vertexStructures = {
     "SD7D22350": {"pos": 0, "weights": 1, "bone_indices": 2, "normal": 3, "color": 4, "undef1": 5, "uv": 6, "undef2": 7},
     "SBED48839": {"pos": 0, "weights": 1, "bone_indices": 2, "normal": 3, "color": 4, "undef1": 5, "uv": 6},
     "NC794193B": {"pos": 0, "normal": 1, "color": 2, "bone_indices": 3, "uv": 4, "uv2": 5, "undef1": 6},
-    "S1E9F420D": {"pos": 0, "weights": 1, "bone_indices": 2, "normal": 3, "color": 4, "uv": 5}
-
+    "S1E9F420D": {"pos": 0, "weights": 1, "bone_indices": 2, "normal": 3, "color": 4, "uv": 5},
+    "NDA8927B7": {"pos": 0, "normal": 1, "color": 2, "undef2": 3, "uv": 4},
+    "NC029036A": {"pos": 0, "normal": 1, "color": 2, "uv": 3},
+    "N3ED26480": {"pos": 0, "normal": 1, "color": 2, "undef2": 3, "uv": 4},
+    "N7A66778B": {"pos": 0, "normal": 1, "color": 2, "uv": 3},
+    "N32AB2B5B": {"pos": 0, "normal": 1, "color": 2, "undef2": 3, "uv": 4}
 }
 
 def getNameFromFile(filepath):
@@ -191,15 +196,17 @@ def setVertexAttributes(Obj, mesh, VertexData, VertexDeclaration, skinned):
             if skinned:
                 # bone indices (4)
                 for i, vg in enumerate(VertexData[mesh.loops[loop_index].vertex_index][boneIndex]):
-                    vg_name = bone_mapping[int(vg)]
-                    if not vg_name in Obj.vertex_groups:
-                        group = Obj.vertex_groups.new(name=vg_name)
-                    else:
-                        group = Obj.vertex_groups[vg_name]
-                    # bone weights (3)
-                    weight = VertexData[mesh.loops[loop_index].vertex_index][weightIndex][i]
-                    if weight > 0.0:
-                        group.add([mesh.loops[loop_index].vertex_index], weight, 'REPLACE' )
+                    # check for non-bones (e.g. bone id 255)
+                    if int(vg) <= int(numBones):
+                        vg_name = bone_mapping[int(vg)]
+                        if not vg_name in Obj.vertex_groups:
+                            group = Obj.vertex_groups.new(name=vg_name)
+                        else:
+                            group = Obj.vertex_groups[vg_name]
+                        # bone weights (3)
+                        weight = VertexData[mesh.loops[loop_index].vertex_index][weightIndex][i]
+                        if weight > 0.0:
+                            group.add([mesh.loops[loop_index].vertex_index], weight, 'REPLACE' )
             if vcolor1:
                 vcolor1.data[loop_index].color = VertexData[mesh.loops[loop_index].vertex_index][vertexStructures[VertexDeclaration]["color"]]/256
             if vcolor2:
@@ -236,7 +243,7 @@ def findArmature(skel_file):
         return True
 
 
-def importMesh(filepath, shaders, import_armature, skinned=False, create_materials=False, **kwargs):
+def importMesh(filepath, shaders, import_armature, skinned=False, create_materials=False, merge_doubles=False, **kwargs):
     global skeleton, bone_mapping
     p = file_parser.GTA_Parser()
     p.read_file(filepath)
@@ -269,20 +276,17 @@ def importMesh(filepath, shaders, import_armature, skinned=False, create_materia
                 skinned_mesh = False
                 print("no skeleton file or armature found for: {0}".format(filepath))
 
-        if not mesh.validate(verbose=True):
-            VertexDeclaration = geometry["VertexDeclaration"]
-            Obj = bpy.data.objects.new(name, mesh)
-            setVertexAttributes(Obj, mesh, geometry["members"][1]["vertices"], VertexDeclaration, skinned_mesh)
-            bpy.context.scene.collection.objects.link(Obj)
-            Obj.select_set(True)
-            objects.append(Obj)
-            bpy.context.view_layer.objects.active = Obj
-            if create_materials != "no":
-                # Assign material to object
-                mat = getMaterial(shaders, shader_index, base_name, create_materials, **kwargs)
-                Obj.data.materials.append(mat)
-        else:
-            print('mesh validation failed for: "{0}"'.format(name))
+        VertexDeclaration = geometry["VertexDeclaration"]
+        Obj = bpy.data.objects.new(name, mesh)
+        setVertexAttributes(Obj, mesh, geometry["members"][1]["vertices"], VertexDeclaration, skinned_mesh)
+        bpy.context.scene.collection.objects.link(Obj)
+        Obj.select_set(True)
+        objects.append(Obj)
+        bpy.context.view_layer.objects.active = Obj
+        if create_materials != "no":
+            # Assign material to object
+            mat = getMaterial(shaders, shader_index, base_name, create_materials, **kwargs)
+            Obj.data.materials.append(mat)
 
     if bpy.context.view_layer.objects.active:
         # join all submeshes
@@ -291,6 +295,12 @@ def importMesh(filepath, shaders, import_armature, skinned=False, create_materia
 
         bpy.context.view_layer.objects.active.name = base_name
         activeObject = bpy.context.view_layer.objects.active
+
+        if merge_doubles == "yes":
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.mesh.remove_doubles(use_unselected=True)
+            bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.shade_smooth()
 
         # apply armature modifier
         if skinned_mesh and skeleton and activeObject:
@@ -312,6 +322,7 @@ def buildArmature(skel_file):
     bpy.context.view_layer.objects.active = Obj
     bpy.ops.object.mode_set(mode='EDIT', toggle=False)
 
+    global numBones
     numBones = skel_file.data["members"][0]["NumBones"]
 
     def addBone(bone, armature, obj, parent=None):
