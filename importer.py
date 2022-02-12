@@ -299,6 +299,7 @@ def importMesh(filepath, shaders, import_armature, skinned=False, create_materia
         if merge_doubles == "yes":
             bpy.ops.object.mode_set(mode='EDIT')
             bpy.ops.mesh.remove_doubles(use_unselected=True)
+            bpy.ops.mesh.normals_make_consistent(inside=False)
             bpy.ops.object.mode_set(mode='OBJECT')
         bpy.ops.object.shade_smooth()
 
